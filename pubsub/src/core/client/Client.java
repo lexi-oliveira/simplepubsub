@@ -1,10 +1,13 @@
 package core.client;
 
+import java.io.InputStream;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.Socket;
+import java.lang.String;
+import java.lang.Thread;
 
 import core.Message;
 
@@ -17,22 +20,25 @@ public class Client {
             s = new Socket(ip, port);
         } catch (Exception e) {
             System.out.println("Client cannot connect with " + ip + " on port: " + port);
-
         }
     }
 
     public Message sendReceive(Message msg) {
+
         try {
             ObjectOutputStream out = new ObjectOutputStream(new BufferedOutputStream(s.getOutputStream()));
             out.writeObject(msg);
             out.flush();
 
-            ObjectInputStream in = new ObjectInputStream(new BufferedInputStream(s.getInputStream()));
+            InputStream stream = s.getInputStream();
+            BufferedInputStream buffer = new BufferedInputStream(stream);
+            ObjectInputStream in = new ObjectInputStream(buffer);
             Message response = (Message) in.readObject();
 
             in.close();
             out.close();
             s.close();
+            
             return response;
         } catch (Exception e) {
             return null;

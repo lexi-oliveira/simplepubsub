@@ -3,111 +3,170 @@ package core;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Arrays;
+import java.lang.String;
+import core.client.Client;
 
 
-//this server represents the producer in a producer/consumer strategy
-//it receives a client socket and inserts it into a resource
+// This server represents the producer in a producer/consumer strategy
+// it receives a client socket and inserts it into a resource
 public class Server {
     protected GenericConsumer<Socket> consumer;
     protected GenericResource<Socket> resource;
     protected int port;
     protected ServerSocket serverSocket;
     protected boolean isPrimary;
-    protected String secondaryServer;
-    protected int secondaryPort;
+    
+    protected boolean isClient; // When constructor Server(port) is called, gets true as value and false otherwise
+    protected ArrayList<String> brokers;
+    protected String primaryServer;
+    protected int primaryPort;
 
     public Server(int port) {
         this.port = port;
-        isPrimary = true;
-        secondaryServer = null;
-        secondaryPort = -1;
+        this.isPrimary = true;
 
-        resource = new GenericResource<Socket>();
+        this.primaryServer = null;
+        this.primaryPort = -1;
+        this.isClient = true;
+
+        this.resource = new GenericResource<Socket>();
     }
 
-    public Server(int port, boolean isPrimary, String secondaryServer, int secondaryPort) {
+    public Server(int port, boolean isPrimary, String primaryServer, int primaryPort) {
         this.port = port;
         this.isPrimary = isPrimary;
-        this.secondaryServer = secondaryServer;
-        this.secondaryPort = secondaryPort;
 
-        resource = new GenericResource<Socket>();
+        this.primaryServer = primaryServer;
+        this.primaryPort = primaryPort;
+        this.isClient = false;
+        this.brokers = null;
 
+        this.resource = new GenericResource<Socket>();
     }
 
+    public Server(int port, boolean isPrimary, ArrayList<String> list, String primaryServer, int primaryPort) {
+        this.port = port;
+        this.isPrimary = isPrimary;
+
+        this.primaryServer = primaryServer;
+        this.primaryPort = primaryPort;
+        this.isClient = false;
+        this.brokers = list;
+
+        this.resource = new GenericResource<Socket>();
+    }
+
+    /**
+     * Reuqest a list of backups to addr:port and insert current location to the list
+     * @param addr - The broker address. The addr must be of a broker with the current list
+     * @param port - The broker port. The port must be of a broker with the current list
+     * @return The list of backups in format "addr:port"
+     */
+    public ArrayList<String> requestList(String addr, int port){
+        
+        String[] responseList = {};
+        
+        // Connection ACK message
+        Message msg = new MessageImpl();
+        msg.setBrokerId(port);
+        msg.setType("syncConnection");
+        msg.setContent("localhost:" + this.port);
+
+        // Create a new Client with the cluster in order to get the current backup list
+        try{
+            Client clusterConn = new Client(addr, port);
+            Message response = clusterConn.sendReceive(msg);
+            
+            if (response == null){
+                throw(new Exception("Unable to receive a response from " + addr + ":" + port));
+
+            } else{
+                responseList = response.getContent().split("-");
+            }
+
+        } catch(Exception e){
+            System.out.println(e);
+        }
+
+        return new ArrayList<String>(Arrays.asList(responseList));
+
+    }
 
     public void begin() {
         try {
 
-            //just one consumer to guarantee a single
-            //log write mechanism
-            consumer = new PubSubConsumer<Socket>(resource, isPrimary, secondaryServer, secondaryPort);
+            // Getting updated backup list after connection 
+            if (!this.isClient && this.brokers == null && !this.isPrimary) 
+                this.brokers = requestList(this.primaryServer, this.primaryPort);
 
-            consumer.start();
+            // Just one consumer to guarantee a single
+            // log write mechanism
+            this.consumer = new PubSubConsumer<Socket>(this.resource, this.isPrimary, this.brokers, this.primaryServer, this.primaryPort);
 
+            this.consumer.start();
             openServerSocket();
 
             //start listening
             listen();
+
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
     protected void listen() {
-
-
-        while (!resource.isStopped()) {
+        while (!this.resource.isStopped()) {
 
             try {
                 Socket clientSocket = this.serverSocket.accept();
+                this.resource.putRegister(clientSocket);
 
-                resource.putRegister(clientSocket);
+                this.primaryServer = this.consumer.getPrimaryAddress();
+                this.primaryPort   = this.consumer.getPrimaryPort();
+                this.isPrimary     = this.consumer.getIsPrimary();
             } catch (IOException e) {
-                if (resource.isStopped()) {
-                    //System.out.println("Stopped.") ;
+
+                if (this.resource.isStopped()) {
                     return;
                 }
-                throw new RuntimeException(
-                        "Error accepting connection", e);
+                throw new RuntimeException("Error accepting connection", e);
             }
 
-
         }
-        System.out.println("Stopped: " + port);
 
+        System.out.println("Stopped: " + port);
     }
 
     private void openServerSocket() {
         try {
             this.serverSocket = new ServerSocket(this.port);
-            System.out.println("Listening on port: " + this.port);
+            System.out.println("\nListening on port: " + this.port);
+
         } catch (IOException e) {
             throw new RuntimeException("Cannot open port " + port, e);
         }
     }
 
     public void stop() {
-        resource.stopServer();
+        this.resource.stopServer();
         listen();
 
-        consumer.stopConsumer();
-        resource.setFinished();
-        //consumer.interrupt();
+        this.consumer.stopConsumer();
+        this.resource.setFinished();
+
         try {
-            serverSocket.close();
+            this.serverSocket.close();
         } catch (IOException e) {
-            // TODO Auto-generated catch block
             e.printStackTrace();
         }
-
-        //System.out.println("verifying consumer.... " + consumer.isInterrupted());
     }
 
     public List<Message> getLogMessages() {
         try {
-            return ((PubSubConsumer<Socket>) consumer).getMessages();
+            return ((PubSubConsumer<Socket>) this.consumer).getMessages();
         } catch (Exception e) {
             return null;
         }

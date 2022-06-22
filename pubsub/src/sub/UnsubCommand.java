@@ -2,6 +2,7 @@ package sub;
 
 import java.util.Set;
 import java.util.SortedSet;
+import java.util.ArrayList;
 
 import core.Message;
 import core.MessageImpl;
@@ -11,9 +12,10 @@ import core.client.Client;
 public class UnsubCommand implements PubSubCommand {
 
     @Override
-    public Message execute(Message m, SortedSet<Message> log, Set<String> subscribers, boolean isPrimary, String sencondaryServerAddress, int secondaryServerPort) {
+    public Message execute(Message m, SortedSet<Message> log, Set<String> subscribers, boolean isPrimary, ArrayList<String> backupAddrs,  String primaryServerAddress, int primaryServerPort, int currentPort) {
 
         Message response = new MessageImpl();
+     
 
         if (!subscribers.contains(m.getContent()))
             response.setContent("subscriber does not exist: " + m.getContent());
@@ -31,10 +33,20 @@ public class UnsubCommand implements PubSubCommand {
                 syncUnsubMsg.setContent(m.getContent());
                 syncUnsubMsg.setLogId(m.getLogId());
                 syncUnsubMsg.setType("syncUnsub");
+                
+                String sencondaryServerAddress;
+                int secondaryServerPort;
 
-                Client clientBackup = new Client(sencondaryServerAddress, secondaryServerPort);
-                syncUnsubMsg = clientBackup.sendReceive(syncUnsubMsg);
-                System.out.println(syncUnsubMsg.getContent());
+                for(int i = 0; i<backupAddrs.size(); i++){
+                    sencondaryServerAddress = backupAddrs.get(i).split(":")[0];
+                    secondaryServerPort = Integer.parseInt(backupAddrs.get(i).split(":")[1]);
+                    
+                    if(sencondaryServerAddress != primaryServerAddress && secondaryServerPort != primaryServerPort && secondaryServerPort != currentPort){
+                        Client clientBackup = new Client(sencondaryServerAddress, secondaryServerPort);
+                        syncUnsubMsg = clientBackup.sendReceive(syncUnsubMsg);
+                        System.out.println(syncUnsubMsg.getContent());
+                    }
+                }
 
             } catch (Exception e) {
                 System.out.println("Cannot sync with backup - unsubscribe service");

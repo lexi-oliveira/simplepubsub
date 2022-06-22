@@ -135,6 +135,13 @@ public class SingleUser {
 
                 sendPrimitive(user, userName, brokerAdd, brokerPort, "release");
 
+                try {
+                    Thread.sleep(10000);
+                } catch (InterruptedException e) {
+                    // TODO Auto-generated catch block
+                    e.printStackTrace();
+                }
+
                 sendPrimitive(user, userName, brokerAdd, brokerPort, "acquire");
 
             }

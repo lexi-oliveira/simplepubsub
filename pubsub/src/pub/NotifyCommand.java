@@ -2,6 +2,7 @@ package pub;
 
 import java.util.Set;
 import java.util.SortedSet;
+import java.util.ArrayList;
 
 import core.Message;
 import core.MessageImpl;
@@ -10,7 +11,7 @@ import core.PubSubCommand;
 public class NotifyCommand implements PubSubCommand {
 
     @Override
-    public Message execute(Message m, SortedSet<Message> log, Set<String> subscribers, boolean isPrimary, String sencondaryServerAddress, int secondaryServerPort) {
+    public Message execute(Message m, SortedSet<Message> log, Set<String> subscribers, boolean isPrimary, ArrayList<String> backupAddrs,  String primaryServerAddress, int primaryServerPort,  int currentPort) {
 
         Message response = new MessageImpl();
 
@@ -20,13 +21,10 @@ public class NotifyCommand implements PubSubCommand {
 
         if (!log.contains(m)) {
             log.add(m);
-        }//else System.out.println("does not insert into log - notify command " + m.getLogId());
-
-        //System.out.println("Notify command - " + m.getBrokerId() + " : " + m.getContent());
+        }
 
         return response;
 
     }
 
 }
-

@@ -3,40 +3,61 @@ package appl;
 import core.Server;
 
 import java.util.Scanner;
+import java.util.ArrayList;
+import java.lang.String;
 
 public class Broker {
 
     public Broker() {
 
-        Scanner reader = new Scanner(System.in);  // Reading from System.in
-        System.out.print("Enter the Broker port number: ");
-        int port = reader.nextInt(); // Scans the next token of the input as an int.
+        Scanner reader = new Scanner(System.in);
+        String primaryAddress = "localhost";
+        int primaryPort = 8080;
+        boolean respBool = false;
+        Server s = null;
+        ArrayList<String> brokers = new ArrayList<String>();
 
-        System.out.print("Is the broker primary?: Y/N");
+        System.out.print("Is the broker primary (Y/N)? ");
         String respYN = reader.next();
+        
+        System.out.print("Enter the Broker port number: ");
+        int port = reader.nextInt();
+        
+        if (respYN.equalsIgnoreCase("Y")) {
+            respBool = true;
+            primaryPort = port;
+            brokers.add(primaryAddress + ":" + primaryPort);
 
-        System.out.print("Enter the secondary Broker address: ");
-        String secondAddress = reader.next();
+            System.out.print("How many backups do you want to add? ");
+            int nBrokers = reader.nextInt();
 
-        System.out.print("Enter the secondary Broker port number: ");
-        int secondPort = reader.nextInt();
+            for(int i = 0; i < nBrokers; i++){
+                System.out.print("Enter the backup in the format 'address:port': ");
+                brokers.add(reader.next());
+            }
 
-        boolean respBol;
-        if (respYN.equalsIgnoreCase("Y")) respBol = true;
-        else respBol = false;
+            s = new Server(port, respBool, brokers, primaryAddress, primaryPort);
 
-        Server s = new Server(port, respBol, secondAddress, secondPort);
+        } else {
+            System.out.print("Enter the Primary Broker address: ");
+            primaryAddress = reader.next();
 
+            System.out.print("Enter the Primary Broker port: ");
+            primaryPort = reader.nextInt();
+
+            s = new Server(port, respBool, primaryAddress, primaryPort);
+        }
+        
         ThreadWrapper brokerThread = new ThreadWrapper(s);
-        brokerThread.start();
+        brokerThread.start(); // Chama ThreadWrapper.run();
 
         System.out.print("Shutdown the broker (Y|N)?: ");
         String resp = reader.next();
+
         if (resp.equals("Y") || resp.equals("y")) {
             System.out.println("Broker stopped...");
             s.stop();
             brokerThread.interrupt();
-
         }
 
         //once finished
@@ -44,7 +65,6 @@ public class Broker {
     }
 
     public static void main(String[] args) {
-        // TODO Auto-generated method stub
         new Broker();
     }
 
